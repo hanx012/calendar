@@ -89,38 +89,7 @@ function loadState() {
   return {
     rangeStart: toISO(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
     rangeEnd: toISO(new Date(today.getFullYear(), today.getMonth() + 2, 0)),
-    items: [
-      {
-        id: crypto.randomUUID(),
-        kind: "case",
-        caseType: "oa",
-        title: "OP2423-EP-1059 一种案件示例",
-        wordCount: "预计账单 13h",
-        notes: "OA 会自动放到 ddl 前一个月",
-        deadline: toISO(addDays(today, 18)),
-        date: toISO(addMonths(addDays(today, 18), -1)),
-        status: "active",
-      },
-      {
-        id: crypto.randomUUID(),
-        kind: "case",
-        caseType: "proofread",
-        title: "1334 校对完成示例",
-        wordCount: "4h",
-        notes: "",
-        deadline: toISO(addDays(today, -2)),
-        date: toISO(addDays(today, -2)),
-        status: "done",
-      },
-      {
-        id: crypto.randomUUID(),
-        kind: "todo",
-        title: "整理术语表",
-        notes: "",
-        date: toISO(today),
-        status: "active",
-      },
-    ],
+    items: [],
   };
 }
 
