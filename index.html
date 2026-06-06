@@ -26,6 +26,29 @@
         <button class="add-case-btn primary proofread-btn" data-case-type="proofread" type="button">添加校对</button>
         <button class="add-case-btn primary oa-btn" data-case-type="oa" type="button">添加OA</button>
         <button id="addTodoBtn" type="button">添加待办</button>
+        <details class="sync-panel">
+          <summary>同步</summary>
+          <div class="sync-menu">
+            <label>
+              用户名
+              <input id="syncOwner" type="text" value="hanx012" />
+            </label>
+            <label>
+              数据仓库
+              <input id="syncRepo" type="text" value="calendar-data" />
+            </label>
+            <label>
+              Token
+              <input id="syncToken" type="password" placeholder="GitHub token" />
+            </label>
+            <div class="sync-actions">
+              <button id="saveSyncSettingsBtn" type="button">保存设置</button>
+              <button id="pullSyncBtn" type="button">从 GitHub 拉取</button>
+              <button id="pushSyncBtn" type="button" class="primary">保存到 GitHub</button>
+            </div>
+            <p id="syncStatus" class="sync-status">未设置同步</p>
+          </div>
+        </details>
       </div>
     </header>
 

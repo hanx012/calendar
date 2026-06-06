@@ -1,4 +1,6 @@
 const STORAGE_KEY = "case-calendar-v1";
+const SYNC_SETTINGS_KEY = "case-calendar-sync-settings-v1";
+const SYNC_FILE_PATH = "calendar-data.json";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const els = {
@@ -8,6 +10,13 @@ const els = {
   todayBtn: document.querySelector("#todayBtn"),
   addCaseBtns: document.querySelectorAll(".add-case-btn"),
   addTodoBtn: document.querySelector("#addTodoBtn"),
+  syncOwner: document.querySelector("#syncOwner"),
+  syncRepo: document.querySelector("#syncRepo"),
+  syncToken: document.querySelector("#syncToken"),
+  saveSyncSettingsBtn: document.querySelector("#saveSyncSettingsBtn"),
+  pullSyncBtn: document.querySelector("#pullSyncBtn"),
+  pushSyncBtn: document.querySelector("#pushSyncBtn"),
+  syncStatus: document.querySelector("#syncStatus"),
   calendar: document.querySelector("#calendar"),
   overdueList: document.querySelector("#overdueList"),
   unpaidList: document.querySelector("#unpaidList"),
@@ -95,6 +104,131 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function loadSyncSettings() {
+  const saved = localStorage.getItem(SYNC_SETTINGS_KEY);
+  if (!saved) return;
+  const settings = JSON.parse(saved);
+  els.syncOwner.value = settings.owner || "hanx012";
+  els.syncRepo.value = settings.repo || "calendar-data";
+  els.syncToken.value = settings.token || "";
+  setSyncStatus(settings.token ? "同步设置已保存" : "未设置 token");
+}
+
+function saveSyncSettings() {
+  const settings = getSyncSettings();
+  localStorage.setItem(SYNC_SETTINGS_KEY, JSON.stringify(settings));
+  setSyncStatus("同步设置已保存");
+}
+
+function getSyncSettings() {
+  return {
+    owner: els.syncOwner.value.trim(),
+    repo: els.syncRepo.value.trim(),
+    token: els.syncToken.value.trim(),
+  };
+}
+
+function setSyncStatus(message) {
+  els.syncStatus.textContent = message;
+}
+
+function validateSyncSettings() {
+  const settings = getSyncSettings();
+  if (!settings.owner || !settings.repo || !settings.token) {
+    setSyncStatus("请先填写用户名、数据仓库和 token");
+    return null;
+  }
+  return settings;
+}
+
+function githubFileUrl(settings) {
+  return `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/${SYNC_FILE_PATH}`;
+}
+
+async function fetchGithubData(settings) {
+  const response = await fetch(githubFileUrl(settings), {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${settings.token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GitHub 读取失败：${response.status}`);
+  return response.json();
+}
+
+function encodeBase64Utf8(value) {
+  return btoa(unescape(encodeURIComponent(value)));
+}
+
+function decodeBase64Utf8(value) {
+  return decodeURIComponent(escape(atob(value.replace(/\n/g, ""))));
+}
+
+function makeSyncPayload() {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    state,
+  };
+}
+
+async function pullFromGithub() {
+  const settings = validateSyncSettings();
+  if (!settings) return;
+  if (state.items.length && !confirm("从 GitHub 拉取会覆盖当前浏览器里的日历数据，确定继续吗？")) return;
+
+  setSyncStatus("正在从 GitHub 拉取...");
+  try {
+    const file = await fetchGithubData(settings);
+    if (!file) {
+      setSyncStatus("GitHub 上还没有数据文件，可以先点“保存到 GitHub”");
+      return;
+    }
+
+    const payload = JSON.parse(decodeBase64Utf8(file.content));
+    state = payload.state || payload;
+    saveState();
+    render();
+    setSyncStatus(`已拉取：${payload.savedAt ? new Date(payload.savedAt).toLocaleString() : "完成"}`);
+  } catch (error) {
+    setSyncStatus(error.message);
+  }
+}
+
+async function pushToGithub() {
+  const settings = validateSyncSettings();
+  if (!settings) return;
+
+  setSyncStatus("正在保存到 GitHub...");
+  try {
+    const existing = await fetchGithubData(settings);
+    const body = {
+      message: `Update calendar data ${new Date().toISOString()}`,
+      content: encodeBase64Utf8(JSON.stringify(makeSyncPayload(), null, 2)),
+    };
+    if (existing?.sha) body.sha = existing.sha;
+
+    const response = await fetch(githubFileUrl(settings), {
+      method: "PUT",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${settings.token}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) throw new Error(`GitHub 保存失败：${response.status}`);
+    setSyncStatus(`已保存：${new Date().toLocaleString()}`);
+  } catch (error) {
+    setSyncStatus(error.message);
+  }
 }
 
 function isOverdue(item) {
@@ -838,6 +972,9 @@ els.addCaseBtns.forEach((button) => {
   });
 });
 els.addTodoBtn.addEventListener("click", () => openDialog("todo"));
+els.saveSyncSettingsBtn.addEventListener("click", saveSyncSettings);
+els.pullSyncBtn.addEventListener("click", pullFromGithub);
+els.pushSyncBtn.addEventListener("click", pushToGithub);
 els.caseType.addEventListener("change", updateCaseFormCopy);
 els.deadline.addEventListener("input", () => {
   const normalized = normalizeLooseDate(els.deadline.value) || normalizeDateInput(els.deadline.value);
@@ -865,4 +1002,5 @@ document.querySelectorAll(".filter").forEach((button) => {
 });
 document.addEventListener("click", hideContextMenu);
 
+loadSyncSettings();
 render();
