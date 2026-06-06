@@ -183,7 +183,7 @@ h2 {
 
 .sync-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 6px;
 }
 
@@ -194,6 +194,26 @@ h2 {
 .sync-status {
   color: var(--muted);
   font-size: 12px;
+}
+
+.dirty-status {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dirty-status.synced {
+  color: #2f6f4e;
+  background: #e8f7ef;
+}
+
+.dirty-status.unsynced {
+  color: #9a5a00;
+  background: #fff0bf;
 }
 
 .header-actions input,
@@ -540,6 +560,18 @@ dialog::backdrop {
 
 .form-grid .wide {
   grid-column: 1 / -1;
+}
+
+.checkbox-line {
+  display: inline-flex !important;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-line input {
+  width: 16px;
+  height: 16px;
 }
 
 .import-wrap {

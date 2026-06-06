@@ -17,6 +17,8 @@ const els = {
   pullSyncBtn: document.querySelector("#pullSyncBtn"),
   pushSyncBtn: document.querySelector("#pushSyncBtn"),
   syncStatus: document.querySelector("#syncStatus"),
+  dirtyStatus: document.querySelector("#dirtyStatus"),
+  syncPanel: document.querySelector(".sync-panel"),
   calendar: document.querySelector("#calendar"),
   overdueList: document.querySelector("#overdueList"),
   unpaidList: document.querySelector("#unpaidList"),
@@ -50,6 +52,8 @@ const els = {
 
 let state = loadState();
 let activeFilter = "all";
+let hasUnsyncedChanges = false;
+let isApplyingRemoteState = false;
 
 function todayDate() {
   const d = new Date();
@@ -106,6 +110,23 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function markUnsynced() {
+  if (isApplyingRemoteState) return;
+  hasUnsyncedChanges = true;
+  updateDirtyStatus();
+}
+
+function markSynced() {
+  hasUnsyncedChanges = false;
+  updateDirtyStatus();
+}
+
+function updateDirtyStatus() {
+  els.dirtyStatus.textContent = hasUnsyncedChanges ? "有未同步更改" : "已同步";
+  els.dirtyStatus.classList.toggle("unsynced", hasUnsyncedChanges);
+  els.dirtyStatus.classList.toggle("synced", !hasUnsyncedChanges);
+}
+
 function loadSyncSettings() {
   const saved = localStorage.getItem(SYNC_SETTINGS_KEY);
   if (!saved) return;
@@ -113,7 +134,7 @@ function loadSyncSettings() {
   els.syncOwner.value = settings.owner || "hanx012";
   els.syncRepo.value = settings.repo || "calendar-data";
   els.syncToken.value = settings.token || "";
-  setSyncStatus(settings.token ? "同步设置已保存" : "未设置 token");
+  setSyncStatus(settings.token ? "同步设置已保存，建议先从 GitHub 拉取" : "未设置 token");
 }
 
 function saveSyncSettings() {
@@ -191,11 +212,15 @@ async function pullFromGithub() {
     }
 
     const payload = JSON.parse(decodeBase64Utf8(file.content));
+    isApplyingRemoteState = true;
     state = payload.state || payload;
     saveState();
     render();
+    isApplyingRemoteState = false;
+    markSynced();
     setSyncStatus(`已拉取：${payload.savedAt ? new Date(payload.savedAt).toLocaleString() : "完成"}`);
   } catch (error) {
+    isApplyingRemoteState = false;
     setSyncStatus(error.message);
   }
 }
@@ -225,6 +250,7 @@ async function pushToGithub() {
     });
 
     if (!response.ok) throw new Error(`GitHub 保存失败：${response.status}`);
+    markSynced();
     setSyncStatus(`已保存：${new Date().toLocaleString()}`);
   } catch (error) {
     setSyncStatus(error.message);
@@ -448,7 +474,11 @@ function openDialog(kind, item = null, date = null) {
     els.status.value = "active";
     els.isNote.checked = false;
   }
-  updateCaseFormCopy();
+  if (kind === "case") updateCaseFormCopy();
+  else {
+    els.dialogTitle.textContent = item ? (item.kind === "note" ? "编辑笔记" : "编辑待办") : "添加待办";
+    els.importWrap.classList.add("hidden");
+  }
   els.itemDialog.showModal();
 }
 
@@ -496,12 +526,14 @@ function saveFromDialog(event) {
   const existingIndex = state.items.findIndex((entry) => entry.id === id);
   if (existingIndex >= 0) state.items[existingIndex] = item;
   else state.items.push(item);
+  markUnsynced();
   closeDialog();
   render();
 }
 
 function updateItem(id, patch) {
   state.items = state.items.map((item) => (item.id === id ? { ...item, ...patch } : item));
+  markUnsynced();
   render();
 }
 
@@ -515,6 +547,7 @@ function shiftItem(id, days) {
 
 function deleteItem(id) {
   state.items = state.items.filter((item) => item.id !== id);
+  markUnsynced();
   render();
 }
 
@@ -957,10 +990,12 @@ function normalizeFieldName(value) {
 
 els.startDate.addEventListener("change", () => {
   state.rangeStart = els.startDate.value;
+  markUnsynced();
   render();
 });
 els.endDate.addEventListener("change", () => {
   state.rangeEnd = els.endDate.value;
+  markUnsynced();
   render();
 });
 els.todayBtn.addEventListener("click", () => {
@@ -1001,6 +1036,18 @@ document.querySelectorAll(".filter").forEach((button) => {
   });
 });
 document.addEventListener("click", hideContextMenu);
+document.addEventListener("click", (event) => {
+  if (els.syncPanel.open && !els.syncPanel.contains(event.target)) {
+    els.syncPanel.open = false;
+  }
+});
+els.syncPanel.addEventListener("click", (event) => event.stopPropagation());
+window.addEventListener("beforeunload", (event) => {
+  if (!hasUnsyncedChanges) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 loadSyncSettings();
+updateDirtyStatus();
 render();
