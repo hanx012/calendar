@@ -393,7 +393,7 @@ function renderItem(item) {
       ? `${itemTypeLabel(item.caseType)} ${item.wordCount || ""} ${item.notes || ""}`.trim()
       : item.kind === "note"
         ? `笔记 ${item.notes || ""}`.trim()
-        : `待办 ${item.notes || ""}`.trim();
+        : `${item.notes || ""}`.trim();
   text.innerHTML = `<strong>${escapeHtml(item.title)}</strong>${meta ? `<br>${escapeHtml(meta)}` : ""}`;
   el.append(text);
   return el;
