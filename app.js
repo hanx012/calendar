@@ -19,6 +19,7 @@ const els = {
   syncStatus: document.querySelector("#syncStatus"),
   dirtyStatus: document.querySelector("#dirtyStatus"),
   syncPanel: document.querySelector(".sync-panel"),
+  toast: document.querySelector("#toast"),
   calendar: document.querySelector("#calendar"),
   overdueList: document.querySelector("#overdueList"),
   unpaidList: document.querySelector("#unpaidList"),
@@ -122,9 +123,17 @@ function markSynced() {
 }
 
 function updateDirtyStatus() {
-  els.dirtyStatus.textContent = hasUnsyncedChanges ? "有未同步更改" : "已同步";
+  els.dirtyStatus.classList.toggle("hidden", !hasUnsyncedChanges);
   els.dirtyStatus.classList.toggle("unsynced", hasUnsyncedChanges);
-  els.dirtyStatus.classList.toggle("synced", !hasUnsyncedChanges);
+}
+
+function showToast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.remove("hidden");
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => {
+    els.toast.classList.add("hidden");
+  }, 1000);
 }
 
 function loadSyncSettings() {
@@ -218,6 +227,7 @@ async function pullFromGithub() {
     render();
     isApplyingRemoteState = false;
     markSynced();
+    showToast("已拉取");
     setSyncStatus(`已拉取：${payload.savedAt ? new Date(payload.savedAt).toLocaleString() : "完成"}`);
   } catch (error) {
     isApplyingRemoteState = false;
@@ -251,6 +261,7 @@ async function pushToGithub() {
 
     if (!response.ok) throw new Error(`GitHub 保存失败：${response.status}`);
     markSynced();
+    showToast("已保存");
     setSyncStatus(`已保存：${new Date().toLocaleString()}`);
   } catch (error) {
     setSyncStatus(error.message);
@@ -479,7 +490,17 @@ function openDialog(kind, item = null, date = null) {
     els.dialogTitle.textContent = item ? (item.kind === "note" ? "编辑笔记" : "编辑待办") : "添加待办";
     els.importWrap.classList.add("hidden");
   }
+  if (kind !== "case") applyTodoDialogMode(item);
   els.itemDialog.showModal();
+}
+
+function applyTodoDialogMode(item = null) {
+  els.itemKind.value = item?.kind || "todo";
+  els.dialogTitle.textContent = item ? (item.kind === "note" ? "编辑笔记" : "编辑待办") : "添加待办";
+  els.caseFields.classList.add("hidden");
+  els.todoDateWrap.classList.remove("hidden");
+  els.noteWrap.classList.remove("hidden");
+  els.importWrap.classList.add("hidden");
 }
 
 function openCaseDialog(caseType) {
@@ -570,6 +591,7 @@ function normalizeDateInput(value) {
 }
 
 function updateCaseFormCopy() {
+  if (els.itemKind.value !== "case") return;
   const type = els.caseType.value;
   if (type === "oa") {
     els.dialogTitle.textContent = els.itemId.value ? "编辑OA" : "添加OA";
@@ -750,6 +772,7 @@ function setDeadline(value) {
 }
 
 function updateCaseFormCopy() {
+  if (els.itemKind.value !== "case") return;
   const type = els.caseType.value;
   if (type === "oa") {
     els.dialogTitle.textContent = els.itemId.value ? "编辑OA" : "添加OA";

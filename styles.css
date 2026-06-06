@@ -216,6 +216,21 @@ h2 {
   background: #fff0bf;
 }
 
+.toast {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 80;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(36, 49, 63, 0.94);
+  box-shadow: 0 14px 35px rgba(36, 49, 63, 0.22);
+  font-size: 14px;
+  pointer-events: none;
+}
+
 .header-actions input,
 .form-grid input,
 .form-grid select,
@@ -563,10 +578,13 @@ dialog::backdrop {
 }
 
 .checkbox-line {
-  display: inline-flex !important;
-  grid-column: 1 / -1;
+  display: flex !important;
+  grid-column: 2;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
+  align-self: end;
+  min-height: 32px;
 }
 
 .checkbox-line input {
