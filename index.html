@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>案件连续周历</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>案件连续周历</h1>
+        <p id="todayText" class="muted"></p>
+      </div>
+      <div class="header-actions">
+        <label>
+          从
+          <input id="startDate" type="date" />
+        </label>
+        <label>
+          到
+          <input id="endDate" type="date" />
+        </label>
+        <button id="todayBtn" type="button">回到今天</button>
+        <button class="add-case-btn primary translate-btn" data-case-type="translate" type="button">添加翻译</button>
+        <button class="add-case-btn primary proofread-btn" data-case-type="proofread" type="button">添加校对</button>
+        <button class="add-case-btn primary oa-btn" data-case-type="oa" type="button">添加OA</button>
+        <button id="addTodoBtn" type="button">添加待办</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section>
+          <h2>筛选</h2>
+          <div class="filter-row">
+            <button class="filter active" data-filter="all" type="button">全部</button>
+            <button class="filter" data-filter="case" type="button">案件</button>
+            <button class="filter" data-filter="todo" type="button">待办</button>
+            <button class="filter" data-filter="overdue" type="button">过期</button>
+          </div>
+        </section>
+        <section>
+          <h2>已过期</h2>
+          <div id="overdueList" class="mini-list"></div>
+        </section>
+        <section>
+          <h2>未结款</h2>
+          <div id="unpaidList" class="mini-list"></div>
+        </section>
+        <section>
+          <h2>图例</h2>
+          <div class="legend"><span class="dot translate"></span>翻译</div>
+          <div class="legend"><span class="dot proofread"></span>校对</div>
+          <div class="legend"><span class="dot oa"></span>OA</div>
+          <div class="legend"><span class="status-chip overdue">过期</span></div>
+          <div class="legend"><span class="status-chip done">完成</span></div>
+          <div class="legend"><span class="status-chip paid">结款</span></div>
+        </section>
+      </aside>
+
+      <section class="calendar-shell">
+        <div class="weekday-row">
+          <div></div>
+          <div>周一</div>
+          <div>周二</div>
+          <div>周三</div>
+          <div>周四</div>
+          <div>周五</div>
+          <div>周六</div>
+          <div>周日</div>
+        </div>
+        <div id="calendar" class="calendar"></div>
+      </section>
+    </main>
+
+    <dialog id="itemDialog">
+      <form id="itemForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="dialogTitle">添加案件</h2>
+          <button id="closeDialogBtn" value="cancel" type="button" aria-label="关闭">×</button>
+        </div>
+        <input id="itemId" type="hidden" />
+        <input id="itemKind" type="hidden" value="case" />
+
+        <div id="caseFields" class="form-grid">
+          <label>
+            案件类型
+            <select id="caseType">
+              <option value="translate">翻译</option>
+              <option value="proofread">校对</option>
+              <option value="oa">OA</option>
+            </select>
+          </label>
+          <label>
+            <span id="deadlineLabel">期限</span>
+            <div class="date-combo">
+              <input id="deadline" type="text" placeholder="2026-01-09" />
+              <input id="deadlinePicker" type="date" aria-label="选择期限" />
+            </div>
+          </label>
+          <label>
+            <span id="workloadLabel">字数/修改小时数</span>
+            <input id="wordCount" type="text" placeholder="例如 6500 / 4h" />
+          </label>
+          <label>
+            状态
+            <select id="status">
+              <option value="active">进行中</option>
+              <option value="overdue">已过期</option>
+              <option value="done">已完成</option>
+              <option value="paid">已结款</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="wide">
+            名称
+            <input id="title" type="text" required placeholder="例如 尾号1234+发明名称" />
+          </label>
+          <label id="todoDateWrap">
+            日期
+            <input id="todoDate" type="text" placeholder="2026-06-01" />
+          </label>
+          <label id="noteWrap">
+            转化为笔记
+            <input id="isNote" type="checkbox" />
+          </label>
+          <label class="wide">
+            备注
+            <textarea id="notes" rows="3" placeholder="可写绝限、客户、特殊指示等"></textarea>
+          </label>
+          <div id="importWrap" class="wide import-wrap">
+            <span>导入</span>
+            <div id="importText" class="paste-box" contenteditable="true" data-placeholder="把表格内容直接粘贴到这里，优先从原表格复制"></div>
+            <button id="importBtn" type="button">导入到表单</button>
+          </div>
+        </div>
+
+        <menu class="dialog-actions">
+          <button id="deleteBtn" type="button" class="danger hidden">删除</button>
+          <span></span>
+          <button id="cancelBtn" type="button">取消</button>
+          <button id="saveBtn" type="submit" class="primary">确定</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div id="contextMenu" class="context-menu hidden"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
