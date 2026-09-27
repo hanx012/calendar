@@ -457,6 +457,46 @@ h2 {
   box-shadow: inset 4px 0 0 #d47a00, 0 0 0 1px rgba(212, 122, 0, 0.28);
 }
 
+.item.returned {
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+}
+
+.item.returned.translate {
+  background: #dcebf8;
+}
+
+.item.returned.proofread {
+  background: #dcefe3;
+}
+
+.item.returned.oa {
+  background: #fbe9c7;
+}
+
+.return-badge {
+  align-self: start;
+  min-width: 18px;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.item.returned.translate .return-badge {
+  color: #286da8;
+}
+
+.item.returned.proofread .return-badge {
+  color: #287a4d;
+}
+
+.item.returned.oa .return-badge {
+  color: #a76500;
+}
+
 .item.done.translate {
   background: #c8ddf1;
 }
@@ -511,6 +551,12 @@ h2 {
 .status-chip.overdue {
   background: #fff238;
   box-shadow: inset 3px 0 0 #d47a00;
+}
+
+.status-chip.returned {
+  color: #315f87;
+  border: 1px solid #7ca4c7;
+  background: #dcebf8;
 }
 
 .status-chip.done {

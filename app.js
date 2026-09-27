@@ -36,6 +36,8 @@ const els = {
   deadlineLabel: document.querySelector("#deadlineLabel"),
   deadline: document.querySelector("#deadline"),
   deadlinePicker: document.querySelector("#deadlinePicker"),
+  absoluteDeadlineWrap: document.querySelector("#absoluteDeadlineWrap"),
+  absoluteDeadline: document.querySelector("#absoluteDeadline"),
   workloadLabel: document.querySelector("#workloadLabel"),
   wordCount: document.querySelector("#wordCount"),
   status: document.querySelector("#status"),
@@ -51,9 +53,10 @@ const els = {
   contextMenu: document.querySelector("#contextMenu"),
 };
 
-let state = loadState();
+const initialState = normalizeState(loadState());
+let state = initialState.state;
 let activeFilter = "all";
-let hasUnsyncedChanges = false;
+let hasUnsyncedChanges = initialState.changed;
 let isApplyingRemoteState = false;
 
 function todayDate() {
@@ -105,6 +108,54 @@ function loadState() {
     rangeEnd: toISO(new Date(today.getFullYear(), today.getMonth() + 2, 0)),
     items: [],
   };
+}
+
+function normalizeState(sourceState, { markOverdue = false } = {}) {
+  let changed = false;
+  let overdueCount = 0;
+  let migratedOaCount = 0;
+  const items = Array.isArray(sourceState?.items) ? sourceState.items : [];
+
+  const normalizedItems = items.map((item) => {
+    const normalized = { ...item };
+
+    // Old OA entries kept the absolute deadline in `deadline` and the working
+    // date in `date`. Preserve both while making the working date canonical.
+    if (
+      normalized.kind === "case" &&
+      normalized.caseType === "oa" &&
+      !normalized.absoluteDeadline &&
+      normalized.deadline &&
+      normalized.date &&
+      normalized.deadline !== normalized.date
+    ) {
+      normalized.absoluteDeadline = normalized.deadline;
+      normalized.deadline = normalized.date;
+      changed = true;
+      migratedOaCount += 1;
+    }
+
+    if (markOverdue && (normalized.status || "active") === "active" && isReferenceDatePast(normalized)) {
+      normalized.status = "overdue";
+      changed = true;
+      overdueCount += 1;
+    }
+
+    return normalized;
+  });
+
+  return {
+    state: { ...sourceState, items: normalizedItems },
+    changed,
+    overdueCount,
+    migratedOaCount,
+  };
+}
+
+function isReferenceDatePast(item) {
+  const referenceDate = item.deadline || item.date;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate || "")) return false;
+  return fromISO(referenceDate) < todayDate();
 }
 
 function saveState() {
@@ -222,13 +273,20 @@ async function pullFromGithub() {
 
     const payload = JSON.parse(decodeBase64Utf8(file.content));
     isApplyingRemoteState = true;
-    state = payload.state || payload;
+    const normalized = normalizeState(payload.state || payload, { markOverdue: true });
+    state = normalized.state;
     saveState();
     render();
     isApplyingRemoteState = false;
     markSynced();
-    showToast("已拉取");
-    setSyncStatus(`已拉取：${payload.savedAt ? new Date(payload.savedAt).toLocaleString() : "完成"}`);
+    if (normalized.changed) markUnsynced();
+    const updates = [];
+    if (normalized.overdueCount) updates.push(`补标 ${normalized.overdueCount} 个过期项目`);
+    if (normalized.migratedOaCount) updates.push(`迁移 ${normalized.migratedOaCount} 个 OA 日期`);
+    showToast(updates.length ? `已拉取，${updates.join("，")}` : "已拉取");
+    setSyncStatus(
+      `已拉取：${payload.savedAt ? new Date(payload.savedAt).toLocaleString() : "完成"}${updates.length ? `；${updates.join("，")}，请保存到 GitHub` : ""}`,
+    );
   } catch (error) {
     isApplyingRemoteState = false;
     setSyncStatus(error.message);
@@ -269,10 +327,7 @@ async function pushToGithub() {
 }
 
 function isOverdue(item) {
-  if (item.status === "overdue") return true;
-  if (item.status === "done" || item.status === "paid") return false;
-  const referenceDate = item.deadline || item.date;
-  return fromISO(referenceDate) < todayDate();
+  return item.status === "overdue";
 }
 
 function displayStatus(item) {
@@ -347,6 +402,7 @@ function getItemsForDate(iso) {
     .filter((item) => {
       if (activeFilter === "all") return true;
       if (activeFilter === "overdue") return isOverdue(item);
+      if (activeFilter === "returned" || activeFilter === "done") return item.status === activeFilter;
       return item.kind === activeFilter;
     })
     .sort((a, b) => (a.kind === b.kind ? a.title.localeCompare(b.title, "zh-CN") : a.kind.localeCompare(b.kind)));
@@ -396,6 +452,13 @@ function renderItem(item) {
         : `${item.notes || ""}`.trim();
   text.innerHTML = `<strong>${escapeHtml(item.title)}</strong>${meta ? `<br>${escapeHtml(meta)}` : ""}`;
   el.append(text);
+  if (item.kind === "case" && item.status === "returned") {
+    const badge = document.createElement("span");
+    badge.className = "return-badge";
+    badge.textContent = "返";
+    badge.title = "已返初稿";
+    el.append(badge);
+  }
   return el;
 }
 
@@ -431,6 +494,7 @@ function showContextMenu(event, id) {
   const actions = [
     ["进行中", () => updateItem(id, { status: "active" })],
     ["已过期", () => updateItem(id, { status: "overdue" })],
+    ...(item.kind === "case" ? [["已返初稿", () => updateItem(id, { status: "returned" })]] : []),
     ["已完成", () => updateItem(id, { status: "done" })],
     ["已结款", () => updateItem(id, { status: "paid" })],
     ["删除", () => deleteItem(id)],
@@ -474,6 +538,7 @@ function openDialog(kind, item = null, date = null) {
     els.caseType.value = item.caseType || "translate";
     els.deadline.value = item.deadline || item.date;
     els.deadlinePicker.value = item.deadline || item.date;
+    els.absoluteDeadline.value = item.absoluteDeadline || "";
     els.wordCount.value = item.wordCount || "";
     els.todoDate.value = item.date;
     els.isNote.checked = item.kind === "note";
@@ -481,6 +546,7 @@ function openDialog(kind, item = null, date = null) {
     const fallback = date || toISO(todayDate());
     els.deadline.value = fallback;
     els.deadlinePicker.value = fallback;
+    els.absoluteDeadline.value = "";
     els.todoDate.value = fallback;
     els.status.value = "active";
     els.isNote.checked = false;
@@ -535,7 +601,10 @@ function saveFromDialog(event) {
       caseType,
       deadline,
       wordCount: els.wordCount.value.trim(),
-      date: caseType === "oa" ? toISO(addMonths(fromISO(deadline), -1)) : deadline,
+      date: deadline,
+      ...(caseType === "oa" && normalizeDateInput(els.absoluteDeadline.value)
+        ? { absoluteDeadline: normalizeDateInput(els.absoluteDeadline.value) }
+        : {}),
     };
   } else {
     item = {
@@ -562,7 +631,7 @@ function shiftItem(id, days) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
   const patch = { date: toISO(addDays(fromISO(item.date), days)) };
-  if (item.deadline && item.caseType !== "oa") patch.deadline = toISO(addDays(fromISO(item.deadline), days));
+  if (item.kind === "case") patch.deadline = patch.date;
   updateItem(id, patch);
 }
 
@@ -578,8 +647,7 @@ function onDropItem(event) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item || !date) return;
   const patch = { date };
-  if (item.kind === "case" && item.caseType !== "oa") patch.deadline = date;
-  if (item.kind === "case" && isOverdue(item)) patch.status = "overdue";
+  if (item.kind === "case") patch.deadline = date;
   updateItem(id, patch);
 }
 
@@ -590,53 +658,6 @@ function normalizeDateInput(value) {
   return Number.isNaN(parsed.getTime()) ? "" : trimmed;
 }
 
-function updateCaseFormCopy() {
-  if (els.itemKind.value !== "case") return;
-  const type = els.caseType.value;
-  if (type === "oa") {
-    els.dialogTitle.textContent = els.itemId.value ? "编辑OA" : "添加OA";
-    els.deadlineLabel.textContent = "期限（自动记录到提前一个月）";
-    els.workloadLabel.textContent = "工作量";
-    els.wordCount.placeholder = "例如 预计账单 13h";
-    els.notes.placeholder = "可写OA类型、简要意见、特殊指示等";
-  } else {
-    els.dialogTitle.textContent = els.itemId.value ? (type === "translate" ? "编辑翻译" : "编辑校对") : type === "translate" ? "添加翻译" : "添加校对";
-    els.deadlineLabel.textContent = "期限";
-    els.workloadLabel.textContent = "字数/修改小时数";
-    els.wordCount.placeholder = "例如 8859 / 4h";
-    els.notes.placeholder = "可写绝限、客户、特殊指示等";
-  }
-  els.importWrap.classList.remove("hidden");
-  els.title.placeholder = "例如 尾号1234+发明名称";
-}
-
-function importPastedCase() {
-  const parsed = parseCasePaste(getImportText());
-  if (!parsed) {
-    alert("没有识别到可导入的表格内容。可以先把原表格复制后直接粘贴进来。");
-    return;
-  }
-
-  const caseType = els.caseType.value;
-  const caseNo = pickField(parsed, ["集佳案号", "委托人案号"]);
-  const tail = caseNo.match(/(\d{4})(?!.*\d)/)?.[1] || caseNo;
-  const invention = pickField(parsed, ["发明名称", "发明中文"]);
-  const title = [tail, invention].filter(Boolean).join(" ");
-  const finalDate = normalizeLooseDate(pickField(parsed, ["上报期限", "绝限"]));
-  const note = pickField(parsed, ["案卷备注", "备注"]);
-
-  els.title.value = title || els.title.value;
-  els.wordCount.value = pickField(parsed, ["字数", "工作量"]) || els.wordCount.value;
-  els.notes.value = [`绝限 ${finalDate || pickField(parsed, ["上报期限", "绝限"])}`, note].filter(Boolean).join("；");
-
-  const deadlineByType = {
-    translate: pickField(parsed, ["翻译期限"]),
-    proofread: pickField(parsed, ["客户要求返稿日"]) || pickField(parsed, ["部门返初稿期限"]),
-    oa: pickField(parsed, ["绝限"]),
-  };
-  els.deadline.value = normalizeLooseDate(deadlineByType[caseType] || "") || els.deadline.value;
-}
-
 function getImportText() {
   const table = els.importText.querySelector("table");
   if (table) {
@@ -645,119 +666,6 @@ function getImportText() {
       .join("\n");
   }
   return els.importText.innerText || "";
-}
-
-function parseCasePaste(text) {
-  const tableParsed = parseStructuredTableText(text);
-  if (tableParsed) return tableParsed;
-
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const knownFields = [
-    "技术领域",
-    "集佳案号",
-    "绝限",
-    "委托人案号",
-    "任务",
-    "发明序号",
-    "国家",
-    "发明中文",
-    "发明名称",
-    "第一申请人",
-    "委托人",
-    "案源人",
-    "字数",
-    "办案人",
-    "翻译组",
-    "翻译人",
-    "校对人",
-    "上报期限",
-    "翻译期限",
-    "客户要求返稿日",
-    "部门返初稿期限",
-    "第一代理人",
-    "案卷备注",
-    "备注",
-    "目标语种",
-    "优先权信息",
-    "PCT申请号",
-    "PCT公开号",
-    "PCT进入途径",
-    "申请途径",
-  ];
-  const firstValueIndex = lines.findIndex((line, index) => index > 0 && !knownFields.includes(line));
-  if (firstValueIndex < 0) return null;
-  const headers = lines.slice(0, firstValueIndex);
-  const values = lines.slice(firstValueIndex);
-  const result = {};
-  headers.forEach((header, index) => {
-    result[header] = values[index] || "";
-  });
-
-  const compact = lines.join("\n");
-  const caseNo = compact.match(/[A-Z]{1,4}\d{4,}-[A-Z]{2,}-\d{3,}/)?.[0];
-  if (caseNo) result["集佳案号"] = caseNo;
-
-  const numbers = values.filter((line) => /^\d{3,6}$/.test(line));
-  if (numbers.length) result["字数"] = numbers[0];
-
-  const dates = values.map(normalizeLooseDate).filter(Boolean);
-  if (dates[0] && !result["上报期限"]) result["上报期限"] = dates[0];
-  if (dates[1] && !result["翻译期限"]) result["翻译期限"] = dates[1];
-  if (dates[2] && !result["客户要求返稿日"]) result["客户要求返稿日"] = dates[2];
-  if (dates[3] && !result["部门返初稿期限"]) result["部门返初稿期限"] = dates[3];
-  if (dates[2] && !dates[3] && !result["部门返初稿期限"]) result["部门返初稿期限"] = dates[2];
-
-  const countries = ["欧洲", "美国", "日本", "韩国", "中国", "德国", "法国", "英国", "加拿大", "澳大利亚"];
-  const countryIndex = values.findIndex((line) => countries.includes(line));
-  if (countryIndex >= 0 && values[countryIndex + 1]) result["发明中文"] = values[countryIndex + 1];
-
-  const languageIndex = values.findIndex((line) => ["英语", "日语", "韩语", "德语", "法语"].includes(line));
-  if (languageIndex > 0) {
-    const beforeLanguage = values.slice(0, languageIndex);
-    const note = [...beforeLanguage].reverse().find((line) => /[；;。]/.test(line) || line.length > 18);
-    if (note) result["案卷备注"] = note;
-  }
-  return result;
-}
-
-function parseStructuredTableText(text) {
-  const rows = text
-    .split(/\r?\n/)
-    .map((line) => line.split("\t").map((cell) => cell.trim()))
-    .filter((row) => row.some(Boolean));
-  if (!rows.length || rows.every((row) => row.length < 2)) return null;
-
-  const result = {};
-  const headerRowIndex = rows.findIndex((row) => row.includes("集佳案号") && row.includes("发明中文"));
-  if (headerRowIndex >= 0 && rows[headerRowIndex + 1]) {
-    rows[headerRowIndex].forEach((header, index) => {
-      result[header] = rows[headerRowIndex + 1][index] || "";
-    });
-    return result;
-  }
-
-  rows.forEach((row) => {
-    if (row.length >= 2 && row[0]) result[row[0]] = row[1] || "";
-  });
-  return Object.keys(result).length ? result : null;
-}
-
-function normalizeLooseDate(value) {
-  const match = value.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
-  if (!match) return "";
-  const [, y, m, d] = match;
-  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-}
-
-function pickField(record, names) {
-  for (const name of names) {
-    const value = record[name];
-    if (value && String(value).trim()) return String(value).trim();
-  }
-  return "";
 }
 
 function escapeHtml(value) {
@@ -776,13 +684,15 @@ function updateCaseFormCopy() {
   const type = els.caseType.value;
   if (type === "oa") {
     els.dialogTitle.textContent = els.itemId.value ? "编辑OA" : "添加OA";
-    els.deadlineLabel.textContent = "期限（自动记录到提前一个月）";
+    els.deadlineLabel.textContent = "工作期限";
+    els.absoluteDeadlineWrap.classList.remove("hidden");
     els.workloadLabel.textContent = "工作量";
     els.wordCount.placeholder = "例如 预计账单 13h";
     els.notes.placeholder = "可写OA类型、简要意见、特殊指示等";
   } else {
     els.dialogTitle.textContent = els.itemId.value ? (type === "translate" ? "编辑翻译" : "编辑校对") : type === "translate" ? "添加翻译" : "添加校对";
     els.deadlineLabel.textContent = "期限";
+    els.absoluteDeadlineWrap.classList.add("hidden");
     els.workloadLabel.textContent = "字数/修改小时数";
     els.wordCount.placeholder = "例如 8859 / 4h";
     els.notes.placeholder = "可写绝限、客户、特殊指示等";
@@ -806,7 +716,9 @@ function importPastedCase() {
 function importOaCase(parsed) {
   fillCommonImportedTitle(parsed);
   const deadline = normalizeLooseDate(pickField(parsed, ["绝限"]));
-  if (deadline) setDeadline(deadline);
+  if (!deadline) return;
+  els.absoluteDeadline.value = deadline;
+  setDeadline(toISO(addMonths(fromISO(deadline), -1)));
 }
 
 function importTranslateOrProofreadCase(parsed, caseType, importText) {

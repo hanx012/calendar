@@ -62,6 +62,8 @@
             <button class="filter" data-filter="case" type="button">案件</button>
             <button class="filter" data-filter="todo" type="button">待办</button>
             <button class="filter" data-filter="overdue" type="button">过期</button>
+            <button class="filter" data-filter="returned" type="button">已返初稿</button>
+            <button class="filter" data-filter="done" type="button">已完成</button>
           </div>
         </section>
         <section>
@@ -78,6 +80,7 @@
           <div class="legend"><span class="dot proofread"></span>校对</div>
           <div class="legend"><span class="dot oa"></span>OA</div>
           <div class="legend"><span class="status-chip overdue">过期</span></div>
+          <div class="legend"><span class="status-chip returned">返初稿</span></div>
           <div class="legend"><span class="status-chip done">完成</span></div>
           <div class="legend"><span class="status-chip paid">结款</span></div>
         </section>
@@ -123,6 +126,10 @@
               <input id="deadlinePicker" type="date" aria-label="选择期限" />
             </div>
           </label>
+          <label id="absoluteDeadlineWrap" class="hidden">
+            <span>OA 绝限</span>
+            <input id="absoluteDeadline" type="text" placeholder="2026-02-09" />
+          </label>
           <label>
             <span id="workloadLabel">字数/修改小时数</span>
             <input id="wordCount" type="text" placeholder="例如 6500 / 4h" />
@@ -132,6 +139,7 @@
             <select id="status">
               <option value="active">进行中</option>
               <option value="overdue">已过期</option>
+              <option value="returned">已返初稿</option>
               <option value="done">已完成</option>
               <option value="paid">已结款</option>
             </select>
